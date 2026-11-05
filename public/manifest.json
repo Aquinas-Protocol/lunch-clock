@@ -1,0 +1,16 @@
+{
+  "name": "Lunch",
+  "short_name": "Lunch",
+  "description": "One tap to start lunch. Shows when to clock back in, in Eastern time.",
+  "id": "/lunch-clock/",
+  "start_url": "/lunch-clock/",
+  "scope": "/lunch-clock/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4EEE4",
+  "theme_color": "#F4EEE4",
+  "icons": [
+    { "src": "/lunch-clock/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/lunch-clock/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

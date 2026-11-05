@@ -1,0 +1,17 @@
+{
+  "name": "lunch-push",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sends Lunch Clock's one clock-in push at the right minute (Cloudflare Worker + Durable Object alarm).",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "keys": "node scripts/gen-vapid.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260612.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.100.0"
+  }
+}

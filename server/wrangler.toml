@@ -1,0 +1,23 @@
+name = "lunch-push"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+[observability]
+enabled = true
+
+[vars]
+# Browser origins allowed to call the API (comma-separated): the installed PWA
+# on GitHub Pages, plus the Vite dev server.
+ALLOWED_ORIGINS = "https://aquinas-protocol.github.io,http://localhost:5174"
+# VAPID "sub" claim: who to contact about these pushes. A URL, not an email.
+VAPID_SUBJECT = "https://aquinas-protocol.github.io/lunch-clock/"
+# Written by scripts/gen-vapid.mjs (the private half is the VAPID_PRIVATE_KEY secret).
+VAPID_PUBLIC_KEY = "BHbXEUG7TKn6wit4xg2Uj3P1g5s6auOis4yxz2FDrBktzbb4-ClV-BDOsyb0fcgwCvbbm5xxkP9kjZnNUlL5lmA"
+
+[[durable_objects.bindings]]
+name = "LUNCH_TIMER"
+class_name = "LunchTimer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LunchTimer"]
