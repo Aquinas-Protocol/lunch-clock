@@ -53,3 +53,18 @@ export function isPushEndpoint(endpoint: string): boolean {
     return false;
   }
 }
+
+// The "she left the app" notice: only while clock-in is comfortably ahead (so
+// the service worker can't mistake it for the clock-in push), and at most once
+// per 15 s (visibilitychange and pagehide can both fire on one exit).
+export const NOTICE_MIN_AHEAD_MS = 90_000;
+export const NOTICE_MIN_GAP_MS = 15_000;
+
+export function shouldSendNotice(
+  clockInAt: number | undefined,
+  lastNoticeAt: number | undefined,
+  now: number,
+): boolean {
+  if (clockInAt === undefined || now > clockInAt - NOTICE_MIN_AHEAD_MS) return false;
+  return lastNoticeAt === undefined || now - lastNoticeAt >= NOTICE_MIN_GAP_MS;
+}

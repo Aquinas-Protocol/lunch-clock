@@ -7,8 +7,8 @@ Live: https://aquinas-protocol.github.io/lunch-clock/
 ## How it works
 
 - **Clock-in time**: tap time + 30 minutes, rounded *up* to the whole minute (so the break is never short), formatted with the IANA zone `America/New_York`. EST/EDT is automatic, and the phone's own zone (Central, Arizona, anything) never matters. Logic and tests: `src/lunch.ts`.
-- **Lock-screen notice**: an installed (Home Screen) web app can use Web Push on iOS 16.4+. On Take Lunch the app subscribes, tells the Worker the clock-in time, and shows "Back at 12:47 PM ET".
-- **Auto-clear**: the Worker (`server/`, Cloudflare Worker + one Durable Object per phone) sets an alarm for the clock-in minute and sends one empty push. The service worker (`public/sw.js`) closes the lunch notice and shows "Time to clock in". iOS requires every push to show something, so a notice can't vanish silently.
+- **Lock-screen notice**: an installed (Home Screen) web app can use Web Push on iOS 16.4+. On Take Lunch the app subscribes and tells the Worker the clock-in time. iOS moves any notification you've already seen (one shown while the app is open) into Notification Center, so "Back at 12:47 PM ET" is pushed only when she *leaves* the app (a `sendBeacon` to `/lunch/notice`): lock the phone from the app and it waits on the lock screen until the next unlock.
+- **Auto-clear**: the Worker (`server/`, Cloudflare Worker + one Durable Object per phone) sets an alarm for the clock-in minute and sends an empty push. The service worker (`public/sw.js`) closes the lunch notice and shows "Time to clock in". iOS requires every push to show something, so a notice can't vanish silently.
 - **No accounts, no history.** State lives in the phone's localStorage; the Worker only holds a push endpoint and one timestamp until the alarm fires.
 
 ## Develop
@@ -20,7 +20,7 @@ npm test           # client logic + Worker helpers
 npm run typecheck
 ```
 
-Test mode: tap the top bar five times quickly (or open with `?test=1`) for a 1-minute lunch. Tap five times again (or `?test=0`) to turn it off.
+Test mode: tap the top bar five times quickly (or open with `?test=1`) for a 3-minute lunch. Tap five times again (or `?test=0`) to turn it off.
 
 ## Deploy
 

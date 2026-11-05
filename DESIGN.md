@@ -46,6 +46,8 @@ Fonts are self-hosted (latin subsets only); no CDN.
 
 ## Components
 
+**Brand mark** — the provided logo (`brand/logo.jpg`, a blue figure on a yellow sun), 32px in the top bar, `mix-blend-mode: multiply` so its white ground disappears into the paper. Also the Home Screen icon. Regenerate with `npm run icons`.
+
 **Primary pill** — full-width, 60px tall, `--ink` fill, `--on-ink` label, a 8px `--terracotta` dot before the label. Pressed: scale 0.97 + slightly lighter fill, 120ms. Focus-visible: 3px `--terracotta` ring offset 3px.
 
 **Quiet button** — text only, Geist 15/500 `--muted`, min 44×44 hit area. Confirm state turns the text `--terracotta` ("Tap again to cancel") for 3 s, then reverts.

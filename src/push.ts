@@ -52,18 +52,25 @@ export async function setReminder(lunch: Lunch, deviceId: string): Promise<Remin
     });
     if (!res.ok) return 'failed';
 
-    await closeLunchNotices(reg);
-    await reg
-      .showNotification(`Back at ${label}`, {
-        tag: TAG,
-        body: "Clock back in then. You'll get a nudge at that time.",
-        icon: `${BASE}icon-180.png`,
-      })
-      .catch(() => {});
+    // No notice now: one shown while she's looking at the app counts as seen
+    // and skips the lock screen. sendLeaveNotice() asks for it when she leaves.
+    await closeLunchNotices(reg); // clear any stale one from an earlier lunch
     return 'set';
   } catch {
     return 'failed';
   }
+}
+
+/**
+ * She just left the app (locked the phone or switched away): ask the Worker to
+ * push the "Back at …" notice now, so it arrives after the lock and stays on the
+ * lock screen. A beacon survives the page being suspended, and a text/plain
+ * body keeps it a simple request (no CORS preflight). Returns whether queued.
+ */
+export function sendLeaveNotice(deviceId: string): boolean {
+  if (!('sendBeacon' in navigator)) return false;
+  const body = new Blob([JSON.stringify({ deviceId })], { type: 'text/plain' });
+  return navigator.sendBeacon(`${PUSH_API}/lunch/notice`, body);
 }
 
 /** Cancel: drop the scheduled push and clear the notice. Never throws. */

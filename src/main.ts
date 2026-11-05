@@ -22,6 +22,7 @@ import {
   clearLocalReminder,
   isStandalone,
   registerServiceWorker,
+  sendLeaveNotice,
   setReminder,
   type ReminderStatus,
 } from './push';
@@ -54,17 +55,13 @@ function endLunch(): void {
 
 // ── Markup ─────────────────────────────────────────────
 
-// The app mark: a half-filled dial (a 30-minute arc) with one hand at noon.
-const MARK = `<svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
-  <circle cx="256" cy="256" r="170" fill="none" stroke="var(--hairline)" stroke-width="40"/>
-  <path d="M256 86 A170 170 0 0 1 256 426" fill="none" stroke="var(--terracotta)" stroke-width="40" stroke-linecap="round"/>
-  <path d="M256 256 V150" stroke="var(--ink)" stroke-width="32" stroke-linecap="round"/>
-  <circle cx="256" cy="256" r="26" fill="var(--ink)"/>
-</svg>`;
+// The brand mark (brand/logo.jpg, rendered by scripts/make-icons.mjs).
+const MARK = `<img class="mark" src="${import.meta.env.BASE_URL}logo-mark.png" alt="" aria-hidden="true">`;
 
 const SHARE = `<svg class="share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>`;
 
-const badge = () => (testMode() ? `<span class="badge">Test · 1 min</span>` : '');
+const TEST_MINUTES = 3; // long enough to lock the phone and see the notice first
+const badge = () => (testMode() ? `<span class="badge">Test · ${TEST_MINUTES} min</span>` : '');
 
 function readyHtml(now: number): string {
   const coach = isStandalone()
@@ -109,7 +106,7 @@ function lunchHtml(lunch: Lunch): string {
 
 const STATUS_TEXT: Record<ReminderStatus, { text: string; tone: 'muted' | 'warn' }> = {
   pending: { text: 'Setting your lock-screen reminder…', tone: 'muted' },
-  set: { text: 'Lock-screen reminder set', tone: 'muted' },
+  set: { text: 'Reminder set. It appears on your lock screen when you lock your phone.', tone: 'muted' },
   denied: { text: 'Notifications are off. The time still shows here.', tone: 'warn' },
   notInstalled: { text: 'Add Lunch to your Home Screen to get a lock-screen reminder.', tone: 'muted' },
   failed: { text: "Couldn't set the reminder. The time still shows here.", tone: 'warn' },
@@ -166,7 +163,7 @@ function scheduleTick(): void {
 // ── Actions ────────────────────────────────────────────
 
 function takeLunch(): void {
-  const lunch = startLunch(Date.now(), testMode() ? 1 : LUNCH_MINUTES);
+  const lunch = startLunch(Date.now(), testMode() ? TEST_MINUTES : LUNCH_MINUTES);
   localStorage.setItem(LUNCH_KEY, JSON.stringify(lunch));
   localStorage.setItem(STATUS_KEY, 'pending');
   render(); // optimistic: the time shows instantly
@@ -201,7 +198,7 @@ function cancelLunch(button: HTMLButtonElement): void {
   render();
 }
 
-// Hidden test switch: five quick taps on the top bar toggles a 1-minute lunch.
+// Hidden test switch: five quick taps on the top bar toggles a short test lunch.
 let taps: number[] = [];
 function eyebrowTap(): void {
   const now = Date.now();
@@ -221,10 +218,26 @@ app.addEventListener('click', event => {
   if (target.closest('[data-eyebrow]')) eyebrowTap();
 });
 
+// iOS moves any notification she has already seen (one shown while the app is
+// open) into Notification Center, off the lock screen. So the "Back at …"
+// notice is only sent once she leaves the app: locking the phone from here
+// puts it on the lock screen, where it stays until her next unlock.
+let noticeSent = false;
+function leftApp(): void {
+  if (noticeSent || shown !== 'onLunch') return;
+  if (localStorage.getItem(STATUS_KEY) !== 'set') return;
+  noticeSent = sendLeaveNotice(deviceId());
+}
+
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) tick();
+  if (document.hidden) leftApp();
+  else {
+    noticeSent = false;
+    tick();
+  }
   scheduleTick();
 });
+window.addEventListener('pagehide', leftApp);
 window.addEventListener('pageshow', () => tick());
 
 // ── Boot ───────────────────────────────────────────────

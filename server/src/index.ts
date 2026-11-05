@@ -1,6 +1,7 @@
 // lunch-push: schedules Lunch Clock's one "Time to clock in" push.
 //   POST   /lunch  { deviceId, clockInAt, subscription }  → alarm at clockInAt
 //   DELETE /lunch  { deviceId }                            → cancel
+//   POST   /lunch/notice { deviceId }                      → "Back at …" push now (she left the app)
 //   GET    /health
 
 import { LunchTimer } from './timer';
@@ -39,12 +40,21 @@ export default {
 
     const { pathname } = new URL(req.url);
     if (pathname === '/health') return json({ ok: true });
-    if (pathname !== '/lunch') return json({ error: 'not found' }, 404);
+    if (pathname !== '/lunch' && pathname !== '/lunch/notice') return json({ error: 'not found' }, 404);
     if (!allowed.includes(origin)) return json({ error: 'origin not allowed' }, 403);
     // Fail closed until the keys are in place.
     if (!env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return json({ error: 'not configured' }, 503);
 
+    // req.json() parses whatever the content-type: the notice beacon sends
+    // text/plain to stay a simple (preflight-free) request.
     const body = await req.json().catch(() => null);
+
+    if (pathname === '/lunch/notice') {
+      if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+      const n = parseCancel(body);
+      if (typeof n === 'string') return json({ error: n }, 400);
+      return json({ ok: true, sent: await timer(env, n.deviceId).notice() });
+    }
 
     if (req.method === 'POST') {
       const s = parseSchedule(body, Date.now());

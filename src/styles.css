@@ -123,9 +123,11 @@ button {
 }
 
 .mark {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   flex: none;
+  /* The logo sits on white; multiply lets the paper show through it. */
+  mix-blend-mode: multiply;
 }
 
 .badge {

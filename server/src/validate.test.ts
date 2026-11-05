@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPushEndpoint, parseCancel, parseSchedule } from './validate';
+import { isPushEndpoint, parseCancel, parseSchedule, shouldSendNotice } from './validate';
 
 const now = Date.parse('2026-11-04T17:16:40Z');
 const deviceId = '3f2b8c4e-1a2b-4c3d-9e8f-0a1b2c3d4e5f';
@@ -53,5 +53,28 @@ describe('parseCancel', () => {
     expect(parseCancel({ deviceId })).toEqual({ deviceId });
     expect(parseCancel({ deviceId: 'x' })).toBe('bad deviceId');
     expect(parseCancel(null)).toBe('bad deviceId');
+  });
+});
+
+describe('shouldSendNotice', () => {
+  const clockInAt = now + 30 * 60_000;
+
+  it('sends while clock-in is comfortably ahead', () => {
+    expect(shouldSendNotice(clockInAt, undefined, now)).toBe(true);
+    expect(shouldSendNotice(clockInAt, undefined, clockInAt - 91_000)).toBe(true);
+  });
+
+  it('never sends close to clock-in (the service worker would mistake it)', () => {
+    expect(shouldSendNotice(clockInAt, undefined, clockInAt - 89_000)).toBe(false);
+    expect(shouldSendNotice(clockInAt, undefined, clockInAt + 1)).toBe(false);
+  });
+
+  it('needs a scheduled lunch', () => {
+    expect(shouldSendNotice(undefined, undefined, now)).toBe(false);
+  });
+
+  it('ignores a double exit within 15 s, then allows a fresh one', () => {
+    expect(shouldSendNotice(clockInAt, now, now + 5_000)).toBe(false);
+    expect(shouldSendNotice(clockInAt, now, now + 15_000)).toBe(true);
   });
 });
