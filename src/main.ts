@@ -72,8 +72,7 @@ function readyHtml(now: number): string {
       <p class="eyebrow">${MARK}<span>${formatToday(now)}</span></p>${badge()}
     </header>
     <div class="hero">
-      <h1 class="headline rise">Ready for<br><em>lunch?</em></h1>
-      <p class="body rise d1">Tap when you clock out. You'll see when to clock back in, in Eastern time.</p>
+      <h1 class="headline rise">Ready for <em>lunch?</em></h1>
     </div>
     <div class="bottom">
       ${coach}
@@ -105,8 +104,9 @@ function lunchHtml(lunch: Lunch): string {
 }
 
 const STATUS_TEXT: Record<ReminderStatus, { text: string; tone: 'muted' | 'warn' }> = {
-  pending: { text: 'Setting your lock-screen reminder…', tone: 'muted' },
-  set: { text: 'Reminder set. It appears on your lock screen when you lock your phone.', tone: 'muted' },
+  // Quiet when things are fine; only problems get a line.
+  pending: { text: '', tone: 'muted' },
+  set: { text: '', tone: 'muted' },
   denied: { text: 'Notifications are off. The time still shows here.', tone: 'warn' },
   notInstalled: { text: 'Add Lunch to your Home Screen to get a lock-screen reminder.', tone: 'muted' },
   failed: { text: "Couldn't set the reminder. The time still shows here.", tone: 'warn' },
@@ -168,12 +168,8 @@ function takeLunch(): void {
   localStorage.setItem(STATUS_KEY, 'pending');
   render(); // optimistic: the time shows instantly
 
-  const started = Date.now();
   // Called synchronously inside the tap so iOS will show the permission prompt.
-  void setReminder(lunch, deviceId()).then(async status => {
-    // Hold "Setting…" briefly so the status doesn't flicker.
-    const wait = 500 - (Date.now() - started);
-    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  void setReminder(lunch, deviceId()).then(status => {
     if (loadLunch()?.startedAt !== lunch.startedAt) return; // canceled meanwhile
     localStorage.setItem(STATUS_KEY, status);
     update();
