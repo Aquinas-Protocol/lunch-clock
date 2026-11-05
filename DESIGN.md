@@ -27,6 +27,7 @@ One accent only. Terracotta never fills large areas; it marks things (a dot, a l
 |---|---|---|---|---|
 | Display numerals | Instrument Serif *Italic* | 112 / 0.9 | 400 | `font-variant-numeric: tabular-nums lining-nums`, letter-spacing −0.02em |
 | Display suffix (PM) | Instrument Serif *Italic* | 40 / 1 | 400 | Baseline-aligned to the numerals |
+| Stepper time | Instrument Serif *Italic* | 28 / 1 | 400 | Clock-out time in the stepper card, tabular figures |
 | Headline | Instrument Serif | min(60px, (100vw − 48px) / 6) / 1 | 400 | Always one line (`nowrap`); mix roman with one *italic* word |
 | Body | Geist | 17 / 1.45 | 400 | `--ink-soft` |
 | Label (buttons) | Geist | 17 / 1 | 500 | Never below 16px (prevents iOS zoom) |
@@ -54,6 +55,8 @@ Fonts are self-hosted (latin subsets only); no CDN.
 
 **Progress line** — 2px `--hairline` track, `--terracotta` fill that drains right-to-left as lunch elapses, with a 6px terracotta dot at the leading edge.
 
+**Clock-out stepper** — a card (`--card`, hairline border, 20px radius, card shadow) with a 44px round − button, a centred caption "Clocked out" over the time ("12:16 PM ET", stepper type), and a 44px round + button. Buttons: `--paper` fill, hairline ring, 16px stroked glyph; pressed scale 0.94; disabled at 35% opacity. Each tap moves clock-out, and with it clock-in, by one minute, so she can match her work computer. − stops when clock-in would be in the past; + stops 15 minutes after the minute she tapped.
+
 **Status line** — caption under the progress line, shown only when something is wrong (notifications off, not installed, reminder failed). Silent when the reminder is set.
 
 **Coach card** — `--card` surface explaining Add to Home Screen, with the Share glyph inline.
@@ -61,7 +64,7 @@ Fonts are self-hosted (latin subsets only); no CDN.
 ## Screens
 
 1. **Ready** — eyebrow (logo + weekday · date), one-line headline "Ready for *lunch?*" (no body copy), Take Lunch pill pinned to the bottom (thumb zone). Coach card above the pill when not installed.
-2. **On lunch** — eyebrow "On lunch" with a softly pulsing terracotta dot, body "Clock back in at", display numerals + PM, caption "Eastern Time · EST", progress line, "28 min left", status line (problems only), quiet Cancel lunch at the bottom.
+2. **On lunch** — eyebrow "On lunch" with a softly pulsing terracotta dot, body "Clock back in at", display numerals + PM, caption "Eastern Time · EST", progress line, "28 min left", status line (problems only); at the bottom, the clock-out stepper above a quiet Cancel lunch.
 
 Lunch ending simply returns to **Ready**.
 
@@ -76,7 +79,7 @@ Lunch ending simply returns to **Ready**.
 - Hit targets ≥ 44px; the primary pill is 60px.
 - `touch-action: manipulation` on controls (no double-tap zoom); custom `-webkit-tap-highlight-color: transparent`.
 - Never disable browser zoom.
-- Optimistic: the clock-in time appears the instant the button is tapped; the reminder is set in the background and reports its result in the status line.
+- Optimistic: the clock-in time appears the instant the button is tapped, and moves the instant the stepper is tapped; the reminder is set (or moved) in the background and reports problems in the status line. Reminder updates run one at a time so the latest time always wins.
 - Destructive actions confirm (Cancel needs a second tap).
 - `overscroll-behavior: contain` on the page so it feels like an app, not a web page.
 

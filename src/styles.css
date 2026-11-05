@@ -264,6 +264,68 @@ button {
   color: var(--terracotta);
 }
 
+/* ── Clock-out stepper ──────────────────────────────── */
+
+.adjust {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3);
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  box-shadow: var(--card-shadow);
+}
+
+.out {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.out-time {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 28px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.step {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    transform 0.12s var(--ease),
+    opacity 0.2s var(--ease);
+}
+
+.step svg {
+  width: 16px;
+  height: 16px;
+}
+
+.step:active {
+  transform: scale(0.94);
+}
+
+.step:disabled {
+  opacity: 0.35;
+  cursor: default;
+  transform: none;
+}
+
 /* ── Live dot ───────────────────────────────────────── */
 
 .live-dot {
@@ -338,7 +400,8 @@ button {
 }
 
 .pill:focus-visible,
-.quiet:focus-visible {
+.quiet:focus-visible,
+.step:focus-visible {
   outline: 3px solid var(--terracotta);
   outline-offset: 3px;
 }
@@ -404,6 +467,7 @@ button {
   }
   .fill,
   .pill,
+  .step,
   .status {
     transition: none;
   }

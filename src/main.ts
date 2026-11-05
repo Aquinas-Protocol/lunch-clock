@@ -7,11 +7,13 @@ import './styles.css';
 
 import {
   LUNCH_MINUTES,
+  clockOutAt,
   formatEastern,
   formatToday,
   parseLunch,
   remainingFraction,
   remainingLabel,
+  shiftClockOut,
   startLunch,
   viewAt,
   type Lunch,
@@ -60,6 +62,9 @@ const MARK = `<img class="mark" src="${import.meta.env.BASE_URL}logo-mark.png" a
 
 const SHARE = `<svg class="share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>`;
 
+const MINUS = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>`;
+const PLUS = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M8 3v10" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>`;
+
 const TEST_MINUTES = 3; // long enough to lock the phone and see the notice first
 const badge = () => (testMode() ? `<span class="badge">Test · ${TEST_MINUTES} min</span>` : '');
 
@@ -81,23 +86,29 @@ function readyHtml(now: number): string {
   </section>`;
 }
 
-function lunchHtml(lunch: Lunch): string {
-  const e = formatEastern(lunch.clockInAt);
+// The times are filled in by update(), so a clock-out adjustment can change
+// them without replaying the entrance motion.
+function lunchHtml(): string {
   return `<section class="screen">
     <header class="top" data-eyebrow>
       <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span><span>On lunch</span></p>${badge()}
     </header>
     <div class="hero">
       <p class="body rise">Clock back in at</p>
-      <p class="display rise d1" aria-label="${e.time} ${e.period} Eastern Time">
-        <span class="numerals">${e.time}</span><span class="period">${e.period}</span>
+      <p class="display rise d1" data-display>
+        <span class="numerals" data-in-time></span><span class="period" data-in-period></span>
       </p>
-      <p class="caption zone rise d1">Eastern Time · ${e.zone}</p>
+      <p class="caption zone rise d1" data-zone></p>
       <div class="progress rise d2" aria-hidden="true"><div class="fill" data-fill></div></div>
       <p class="remaining rise d2" data-remaining></p>
       <p class="caption status rise d2" data-status></p>
     </div>
     <div class="bottom">
+      <div class="adjust rise d3">
+        <button class="step" type="button" data-action="earlier" aria-label="Clocked out a minute earlier">${MINUS}</button>
+        <p class="out"><span class="caption">Clocked out</span><span class="out-time" data-out></span></p>
+        <button class="step" type="button" data-action="later" aria-label="Clocked out a minute later">${PLUS}</button>
+      </div>
       <button class="quiet rise d3" type="button" data-action="cancel">Cancel lunch</button>
     </div>
   </section>`;
@@ -121,7 +132,7 @@ let ticker: number | undefined;
 function render(): void {
   const now = Date.now();
   const view = viewAt(loadLunch(), now);
-  app.innerHTML = view.kind === 'onLunch' ? lunchHtml(view.lunch) : readyHtml(now);
+  app.innerHTML = view.kind === 'onLunch' ? lunchHtml() : readyHtml(now);
   shown = view.kind;
   update();
   scheduleTick();
@@ -132,6 +143,19 @@ function update(): void {
   const lunch = loadLunch();
   if (!lunch || shown !== 'onLunch') return;
   const now = Date.now();
+  const clockIn = formatEastern(lunch.clockInAt);
+  setText('[data-in-time]', clockIn.time);
+  setText('[data-in-period]', clockIn.period);
+  setText('[data-zone]', `Eastern Time · ${clockIn.zone}`);
+  setText('[data-out]', formatEastern(clockOutAt(lunch)).label);
+  app
+    .querySelector('[data-display]')
+    ?.setAttribute('aria-label', `${clockIn.time} ${clockIn.period} Eastern Time`);
+  const earlier = app.querySelector<HTMLButtonElement>('[data-action="earlier"]');
+  const later = app.querySelector<HTMLButtonElement>('[data-action="later"]');
+  if (earlier) earlier.disabled = !shiftClockOut(lunch, -1, now);
+  if (later) later.disabled = !shiftClockOut(lunch, 1, now);
+
   const fill = app.querySelector<HTMLElement>('[data-fill]');
   const remaining = app.querySelector<HTMLElement>('[data-remaining]');
   const status = app.querySelector<HTMLElement>('[data-status]');
@@ -142,6 +166,11 @@ function update(): void {
     status.textContent = s.text;
     status.dataset.tone = s.tone;
   }
+}
+
+function setText(selector: string, text: string): void {
+  const el = app.querySelector<HTMLElement>(selector);
+  if (el && el.textContent !== text) el.textContent = text;
 }
 
 function tick(): void {
@@ -162,6 +191,18 @@ function scheduleTick(): void {
 
 // ── Actions ────────────────────────────────────────────
 
+// Reminder updates run one at a time, so after several quick taps on the
+// clock-out stepper the Worker still ends up with the latest clock-in time.
+let reminderQueue: Promise<void> = Promise.resolve();
+let syncedClockIn = 0; // the clock-in time the Worker last accepted
+
+function recordReminder(lunch: Lunch, status: ReminderStatus): void {
+  if (loadLunch()?.startedAt !== lunch.startedAt) return; // canceled meanwhile
+  localStorage.setItem(STATUS_KEY, status);
+  if (status === 'set') syncedClockIn = lunch.clockInAt;
+  update();
+}
+
 function takeLunch(): void {
   const lunch = startLunch(Date.now(), testMode() ? TEST_MINUTES : LUNCH_MINUTES);
   localStorage.setItem(LUNCH_KEY, JSON.stringify(lunch));
@@ -169,10 +210,22 @@ function takeLunch(): void {
   render(); // optimistic: the time shows instantly
 
   // Called synchronously inside the tap so iOS will show the permission prompt.
-  void setReminder(lunch, deviceId()).then(status => {
-    if (loadLunch()?.startedAt !== lunch.startedAt) return; // canceled meanwhile
-    localStorage.setItem(STATUS_KEY, status);
-    update();
+  reminderQueue = setReminder(lunch, deviceId()).then(status => recordReminder(lunch, status));
+}
+
+function adjustClockOut(deltaMinutes: number): void {
+  const lunch = loadLunch();
+  const next = lunch && shiftClockOut(lunch, deltaMinutes, Date.now());
+  if (!next) return;
+  localStorage.setItem(LUNCH_KEY, JSON.stringify(next));
+  update(); // optimistic: the new times show instantly
+
+  reminderQueue = reminderQueue.then(async () => {
+    const current = loadLunch(); // whatever is latest by the time this runs
+    const status = localStorage.getItem(STATUS_KEY);
+    if (!current || current.clockInAt === syncedClockIn) return;
+    if (status !== 'set' && status !== 'failed') return; // no reminder to move
+    recordReminder(current, await setReminder(current, deviceId()));
   });
 }
 
@@ -190,7 +243,8 @@ function cancelLunch(button: HTMLButtonElement): void {
   }
   window.clearTimeout(disarm);
   endLunch();
-  void cancelReminder(deviceId());
+  const id = deviceId();
+  reminderQueue = reminderQueue.then(() => cancelReminder(id)); // after any update in flight
   render();
 }
 
@@ -211,6 +265,8 @@ app.addEventListener('click', event => {
   const action = target.closest<HTMLButtonElement>('[data-action]');
   if (action?.dataset.action === 'take') return takeLunch();
   if (action?.dataset.action === 'cancel') return cancelLunch(action);
+  if (action?.dataset.action === 'earlier') return adjustClockOut(-1);
+  if (action?.dataset.action === 'later') return adjustClockOut(1);
   if (target.closest('[data-eyebrow]')) eyebrowTap();
 });
 

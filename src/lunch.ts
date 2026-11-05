@@ -10,15 +10,39 @@ const MINUTE = 60_000;
 export interface Lunch {
   startedAt: number; // epoch ms when she tapped Take Lunch
   clockInAt: number; // epoch ms, always on a whole minute
-  minutes: number; // lunch length (30, or 1 in test mode)
+  minutes: number; // lunch length (30, or 3 in test mode)
 }
 
 export type View = { kind: 'ready' } | { kind: 'onLunch'; lunch: Lunch };
 
-/** Start a lunch. Clock-in is rounded UP to the next whole minute so the break is never short. */
+/**
+ * Start a lunch. Her work clock records clock-out to the minute (a 12:16:40 tap
+ * is a 12:16 clock-out), so clock-out is the minute she tapped and clock-in is
+ * exactly `minutes` later. Rounding up instead made her a minute late.
+ */
 export function startLunch(now: number, minutes = LUNCH_MINUTES): Lunch {
-  const clockInAt = Math.ceil((now + minutes * MINUTE) / MINUTE) * MINUTE;
-  return { startedAt: now, clockInAt, minutes };
+  const clockOut = Math.floor(now / MINUTE) * MINUTE;
+  return { startedAt: now, clockInAt: clockOut + minutes * MINUTE, minutes };
+}
+
+/** The clock-out minute this lunch counts from. */
+export function clockOutAt(lunch: Lunch): number {
+  return lunch.clockInAt - lunch.minutes * MINUTE;
+}
+
+/** How much later than her tap the clock-out can be set. */
+export const MAX_LATER_MINUTES = 15;
+
+/**
+ * Move clock-out (and with it clock-in) by whole minutes to match her work
+ * clock. Null when out of range: clock-in must stay in the future, and
+ * clock-out can be at most MAX_LATER_MINUTES after the minute she tapped.
+ */
+export function shiftClockOut(lunch: Lunch, deltaMinutes: number, now: number): Lunch | null {
+  const clockInAt = lunch.clockInAt + deltaMinutes * MINUTE;
+  const latestOut = Math.floor(lunch.startedAt / MINUTE) * MINUTE + MAX_LATER_MINUTES * MINUTE;
+  if (clockInAt <= now || clockInAt - lunch.minutes * MINUTE > latestOut) return null;
+  return { ...lunch, clockInAt };
 }
 
 export function viewAt(lunch: Lunch | null, now: number): View {
@@ -50,20 +74,19 @@ export function formatEastern(ms: number): EasternTime {
 }
 
 /**
- * "28 min left". Counts clock minutes to the clock-in time (so it matches the
- * clock), capped at the lunch length so a 30-minute lunch never opens on "31".
+ * "28 min left". Counts clock minutes to the clock-in time, so it matches the
+ * clock. Can read above the lunch length if she set clock-out later than now.
  */
 export function remainingLabel(lunch: Lunch, now: number): string {
   const ms = lunch.clockInAt - now;
   if (ms <= 0) return '';
   if (ms < MINUTE) return 'Under a minute left';
-  return `${Math.min(Math.ceil(ms / MINUTE), lunch.minutes)} min left`;
+  return `${Math.ceil(ms / MINUTE)} min left`;
 }
 
-/** Share of the lunch still remaining, 1 → 0. */
+/** Share of the lunch still remaining, measured from clock-out, 1 → 0. */
 export function remainingFraction(lunch: Lunch, now: number): number {
-  const total = lunch.clockInAt - lunch.startedAt;
-  return Math.min(1, Math.max(0, (lunch.clockInAt - now) / total));
+  return Math.min(1, Math.max(0, (lunch.clockInAt - now) / (lunch.minutes * MINUTE)));
 }
 
 /** "Wednesday · November 4" in the phone's own zone (it's her day, wherever she is). */

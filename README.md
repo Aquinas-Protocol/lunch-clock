@@ -6,7 +6,8 @@ Live: https://aquinas-protocol.github.io/lunch-clock/
 
 ## How it works
 
-- **Clock-in time**: tap time + 30 minutes, rounded *up* to the whole minute (so the break is never short), formatted with the IANA zone `America/New_York`. EST/EDT is automatic, and the phone's own zone (Central, Arizona, anything) never matters. Logic and tests: `src/lunch.ts`.
+- **Clock-in time**: clock-out + 30 minutes, formatted with the IANA zone `America/New_York`. Clock-out is the minute she tapped, with the seconds dropped, because that is what her work clock records (a 12:16:40 tap is a 12:16 clock-out, so she is due back at 12:46). EST/EDT is automatic, and the phone's own zone (Central, Arizona, anything) never matters. Logic and tests: `src/lunch.ts`.
+- **Clock-out stepper**: on the lunch screen, − and + move clock-out (and so clock-in) a minute at a time to match her work computer. The new time shows at once, and the reminder is moved to it in the background.
 - **Lock-screen notice**: an installed (Home Screen) web app can use Web Push on iOS 16.4+. On Take Lunch the app subscribes and tells the Worker the clock-in time. iOS moves any notification you've already seen (one shown while the app is open) into Notification Center, so "Back at 12:47 PM ET" is pushed only when she *leaves* the app (a `sendBeacon` to `/lunch/notice`): lock the phone from the app and it waits on the lock screen until the next unlock.
 - **Auto-clear**: the Worker (`server/`, Cloudflare Worker + one Durable Object per phone) sets an alarm for the clock-in minute and sends an empty push. The service worker (`public/sw.js`) closes the lunch notice and shows "Time to clock in". iOS requires every push to show something, so a notice can't vanish silently.
 - **No accounts, no history.** State lives in the phone's localStorage; the Worker only holds a push endpoint and one timestamp until the alarm fires.

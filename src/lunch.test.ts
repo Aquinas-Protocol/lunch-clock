@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  MAX_LATER_MINUTES,
+  clockOutAt,
   formatEastern,
   parseLunch,
   remainingFraction,
   remainingLabel,
+  shiftClockOut,
   startLunch,
   viewAt,
 } from './lunch';
@@ -34,16 +37,25 @@ describe.each(PHONE_ZONES)('phone on %s', tz => {
     expect(new Date(at('2026-11-04T17:16:40Z')).getTimezoneOffset()).toBe(offsets[tz]);
   });
 
-  it('rounds clock-in up to the next whole minute (never a short lunch)', () => {
-    // 11:16:40 AM CST on Wed 2026-11-04 = 17:16:40Z.
+  it('counts from the minute she tapped, like her work clock (never a minute late)', () => {
+    // 11:16:40 AM CST on Wed 2026-11-04 = 17:16:40Z. Work records a 12:16 PM ET
+    // clock-out, so she is due back at 12:46, not 12:47.
     const lunch = startLunch(at('2026-11-04T17:16:40Z'));
-    expect(lunch.clockInAt).toBe(at('2026-11-04T17:47:00Z'));
+    expect(clockOutAt(lunch)).toBe(at('2026-11-04T17:16:00Z'));
+    expect(lunch.clockInAt).toBe(at('2026-11-04T17:46:00Z'));
     expect(formatEastern(lunch.clockInAt)).toEqual({
-      time: '12:47',
+      time: '12:46',
       period: 'PM',
       zone: 'EST',
-      label: '12:47 PM ET',
+      label: '12:46 PM ET',
     });
+  });
+
+  it('gives the same clock-in for any second of the tapped minute', () => {
+    const first = startLunch(at('2026-11-04T17:16:00.000Z'));
+    const last = startLunch(at('2026-11-04T17:16:59.999Z'));
+    expect(first.clockInAt).toBe(at('2026-11-04T17:46:00Z'));
+    expect(last.clockInAt).toBe(at('2026-11-04T17:46:00Z'));
   });
 
   it('keeps an exact-minute start exact', () => {
@@ -91,36 +103,72 @@ describe('view state', () => {
 });
 
 describe('countdown', () => {
-  const lunch = startLunch(at('2026-11-04T17:16:40Z')); // clock-in 17:47:00Z
+  const lunch = startLunch(at('2026-11-04T17:16:40Z')); // clock-out 17:16, clock-in 17:46
 
-  it('opens on the lunch length, not one more', () => {
+  it('opens on the lunch length', () => {
     expect(remainingLabel(lunch, lunch.startedAt)).toBe('30 min left');
   });
 
   it('counts clock minutes to the clock-in time', () => {
-    expect(remainingLabel(lunch, at('2026-11-04T17:20:30Z'))).toBe('27 min left');
-    expect(remainingLabel(lunch, at('2026-11-04T17:45:30Z'))).toBe('2 min left');
-    expect(remainingLabel(lunch, at('2026-11-04T17:46:00Z'))).toBe('1 min left');
+    expect(remainingLabel(lunch, at('2026-11-04T17:20:30Z'))).toBe('26 min left');
+    expect(remainingLabel(lunch, at('2026-11-04T17:44:30Z'))).toBe('2 min left');
+    expect(remainingLabel(lunch, at('2026-11-04T17:45:00Z'))).toBe('1 min left');
   });
 
   it('says under a minute at the end, then nothing', () => {
-    expect(remainingLabel(lunch, at('2026-11-04T17:46:30Z'))).toBe('Under a minute left');
+    expect(remainingLabel(lunch, at('2026-11-04T17:45:30Z'))).toBe('Under a minute left');
     expect(remainingLabel(lunch, lunch.clockInAt)).toBe('');
   });
 
-  it('drains the progress fraction from 1 to 0', () => {
-    expect(remainingFraction(lunch, lunch.startedAt)).toBe(1);
+  it('drains the progress fraction from 1 at clock-out to 0 at clock-in', () => {
+    expect(remainingFraction(lunch, clockOutAt(lunch))).toBe(1);
+    expect(remainingFraction(lunch, clockOutAt(lunch) + 15 * MIN)).toBe(0.5);
     expect(remainingFraction(lunch, lunch.clockInAt)).toBe(0);
     expect(remainingFraction(lunch, lunch.clockInAt + MIN)).toBe(0);
-    const mid = remainingFraction(lunch, lunch.startedAt + 15 * MIN);
-    expect(mid).toBeGreaterThan(0.45);
-    expect(mid).toBeLessThan(0.55);
   });
 
-  it('supports the 1-minute test lunch', () => {
-    const test = startLunch(at('2026-11-04T17:16:40Z'), 1);
-    expect(test.clockInAt).toBe(at('2026-11-04T17:18:00Z'));
-    expect(remainingLabel(test, test.startedAt)).toBe('1 min left');
+  it('supports the 3-minute test lunch', () => {
+    const test = startLunch(at('2026-11-04T17:16:40Z'), 3);
+    expect(test.clockInAt).toBe(at('2026-11-04T17:19:00Z'));
+    expect(remainingLabel(test, test.startedAt)).toBe('3 min left');
+  });
+});
+
+describe('adjusting the clock-out time', () => {
+  const tap = at('2026-11-04T17:16:40Z'); // clock-out 12:16 PM ET, clock-in 12:46
+  const lunch = startLunch(tap);
+
+  it('moves clock-in with clock-out, a minute at a time', () => {
+    const earlier = shiftClockOut(lunch, -1, tap)!;
+    expect(formatEastern(clockOutAt(earlier)).label).toBe('12:15 PM ET');
+    expect(formatEastern(earlier.clockInAt).label).toBe('12:45 PM ET');
+    const later = shiftClockOut(lunch, 2, tap)!;
+    expect(formatEastern(later.clockInAt).label).toBe('12:48 PM ET');
+    expect(later.startedAt).toBe(lunch.startedAt); // same lunch
+  });
+
+  it('can go back as far as she likes while clock-in is still ahead', () => {
+    expect(shiftClockOut(lunch, -29, tap)).not.toBeNull(); // clock-in 17:17:00
+    expect(shiftClockOut(lunch, -30, tap)).toBeNull(); // clock-in 17:16:00, already past
+    // Later in the lunch the floor rises with the clock.
+    expect(shiftClockOut(lunch, -1, at('2026-11-04T17:44:59Z'))).not.toBeNull();
+    expect(shiftClockOut(lunch, -1, at('2026-11-04T17:45:00Z'))).toBeNull();
+  });
+
+  it(`stops ${MAX_LATER_MINUTES} minutes after the tapped minute`, () => {
+    expect(shiftClockOut(lunch, MAX_LATER_MINUTES, tap)).not.toBeNull();
+    expect(shiftClockOut(lunch, MAX_LATER_MINUTES + 1, tap)).toBeNull();
+  });
+
+  it('counts down past 30 when clock-out is set later than now', () => {
+    const later = shiftClockOut(lunch, 5, tap)!; // clock-out 17:21, clock-in 17:51
+    expect(remainingLabel(later, tap)).toBe('35 min left');
+    expect(remainingFraction(later, tap)).toBe(1);
+  });
+
+  it('survives storage', () => {
+    const later = shiftClockOut(lunch, 3, tap)!;
+    expect(parseLunch(JSON.stringify(later))).toEqual(later);
   });
 });
 
